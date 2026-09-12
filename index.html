@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Price Comparison Agent</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 700px;
+      margin: 40px auto;
+      background: #7d9565;
+      color: #eee;
+      padding: 0 20px;
+    }
+    h1 { font-size: 1.4rem; }
+    #query {
+      width: 70%;
+      padding: 10px;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #1a1a1a;
+      color: #eee;
+    }
+    button {
+      padding: 10px 16px;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: none;
+      background: #4f8cff;
+      color: white;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #steps {
+      margin-top: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .step {
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      background: #1a1a1a;
+      border-left: 4px solid #444;
+      white-space: pre-wrap;
+    }
+    .step.thinking { border-left-color: #ffb84f; }
+    .step.observation { border-left-color: #4fb8ff; }
+    .step.info { border-left-color: #666; opacity: 0.6; font-size: 0.8rem; }
+    .step.warning { border-left-color: #ff4f4f; }
+    .step.final_answer {
+      border-left-color: #4fff88;
+      background: #142a1c;
+      font-size: 1rem;
+      line-height: 1.5;
+    } 
+    
+    .step.final_answer table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    .step.final_answer th, .step.final_answer td {
+      border: 1px solid #333;
+      padding: 6px 10px;
+      text-align: left;
+    }
+    .step.final_answer strong {
+      color: #4fff88;
+    }
+    .step.final_answer ul, .step.final_answer ol {
+      padding-left: 20px;
+    }
+
+    .progress-container {
+    margin-top: 20px;
+    padding: 14px;
+    background: #1a1a1a;
+    border-radius: 8px;
+  }
+
+  .progress-bar-track {
+    width: 100%;
+    height: 10px;
+    background: #333;
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4f8cff, #4fff88);
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+
+  .progress-label {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: #ccc;
+  }
+  </style>
+</head> 
+<body>
+  <h1>Price Comparison Agent</h1>
+  <p>Searching through Shopee & Lazada.</p>
+
+  <input id="query" type="text" placeholder="e.g. foldable gaming chair under RM150" />
+  <button id="searchBtn">Search</button>
+
+  <div id="steps"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <script>
+  const btn = document.getElementById("searchBtn");
+  const input = document.getElementById("query");
+  const stepsDiv = document.getElementById("steps");
+
+  const statusLabels = {
+    thinking: "Searching...",
+    observation: "Comparing listings...",
+    info: "Evaluating options...",
+    warning: "Adjusting approach...",
+  };
+
+  let currentProgress = 0;
+
+  function updateProgress(percent, label) {
+    const fill = document.getElementById("progress-fill");
+    const labelEl = document.getElementById("progress-label");
+    if (fill) fill.style.width = percent + "%";
+    if (labelEl && label) labelEl.textContent = label;
+  }
+
+  function addStep(step) {
+    if (step.type === "final_answer") {
+      let content = step.content;
+
+      // if content arrived as a JSON string instead of a real object, parse it
+      if (typeof content === "string") {
+        try {
+          content = JSON.parse(content);
+        } catch (e) {
+          // genuinely just plain text, leave as string
+        }
+      }
+
+      if (typeof content === "object" && content !== null) {
+        updateProgress(100, "Done!");
+        setTimeout(() => {
+          const existing = document.getElementById("loading-indicator");
+          if (existing) existing.remove();
+
+          const el = document.createElement("div");
+          el.className = "step final_answer";
+          el.appendChild(renderFinalAnswer(content));
+          stepsDiv.appendChild(el);
+          el.scrollIntoView({ behavior: "smooth", block: "end" });
+        }, 400);
+        return;
+      }
+    }
+
+    currentProgress = Math.min(currentProgress + 15, 90);
+    const label = statusLabels[step.type] || "Working...";
+    updateProgress(currentProgress, label);
+  }
+
+  function renderFinalAnswer(data) {
+    const container = document.createElement("div");
+
+    if (data.search_suggestions) {
+      const suggBox = document.createElement("div");
+      suggBox.style.marginBottom = "12px";
+      suggBox.style.color = "#ffb84f";
+      suggBox.textContent = "💡 Try instead: " + data.search_suggestions;
+      container.appendChild(suggBox);
+    }
+
+    (data.products || []).forEach((product) => {
+      const card = document.createElement("div");
+      card.style.background = "#182818";
+      card.style.border = "1px solid #2a3a2a";
+      card.style.borderRadius = "8px";
+      card.style.padding = "14px";
+      card.style.marginBottom = "10px";
+
+      const title = document.createElement("div");
+      title.style.fontWeight = "bold";
+      title.style.marginBottom = "4px";
+      title.innerHTML = product.name + ' <span style="color:#888; font-weight:normal;">— ' + product.site + '</span>';
+      card.appendChild(title);
+
+      const price = document.createElement("div");
+      price.style.color = "#4fff88";
+      price.style.marginBottom = "6px";
+      price.textContent = product.price;
+      card.appendChild(price);
+
+      const desc = document.createElement("div");
+      desc.style.fontSize = "0.85rem";
+      desc.style.color = "#aaa";
+      desc.style.marginBottom = "8px";
+      desc.textContent = product.description;
+      card.appendChild(desc);
+
+      (product.requirements || []).forEach((req) => {
+        const row = document.createElement("div");
+        row.style.fontSize = "0.85rem";
+        row.style.marginBottom = "3px";
+
+        const scoreDisplay = req.type === "fixed"
+          ? (req.score >= 4 ? "✅" : req.score <= 1 ? "❌" : "⚠️")
+          : "⭐".repeat(Math.round(req.score)) + "☆".repeat(5 - Math.round(req.score));
+
+        row.innerHTML = "<strong>" + req.label + ":</strong> " + scoreDisplay + ' <span style="color:#888;">- ' + req.note + "</span>";
+        card.appendChild(row);
+      });
+
+      if (product.link) {
+        const link = document.createElement("a");
+        link.href = product.link;
+        link.target = "_blank";
+        link.textContent = "View listing →";
+        link.style.color = "#4f8cff";
+        link.style.fontSize = "0.85rem";
+        link.style.display = "inline-block";
+        link.style.marginTop = "6px";
+        card.appendChild(link);
+      }
+
+      container.appendChild(card);
+    });
+
+    const rec = document.createElement("div");
+    rec.style.marginTop = "10px";
+    rec.style.padding = "10px";
+    rec.style.background = "#1a2a3a";
+    rec.style.borderRadius = "6px";
+    rec.innerHTML = "<strong>Recommendation:</strong> " + data.recommendation;
+    container.appendChild(rec);
+
+    return container;
+  }
+
+  btn.addEventListener("click", () => {
+    const query = input.value.trim();
+    if (!query) return;
+    console.log("Button clicked, query:", query);
+
+    stepsDiv.innerHTML = "";
+    btn.disabled = true;
+    btn.textContent = "Searching...";
+    currentProgress = 5;
+
+    const progressEl = document.createElement("div");
+    progressEl.id = "loading-indicator";
+    progressEl.className = "progress-container";
+    progressEl.innerHTML =
+      '<div class="progress-bar-track">' +
+      '<div class="progress-bar-fill" id="progress-fill"></div>' +
+      "</div>" +
+      '<div class="progress-label" id="progress-label">Connecting to agent...</div>';
+    stepsDiv.appendChild(progressEl);
+    updateProgress(currentProgress, "Connecting to agent...");
+
+    console.log("Creating websocket...");
+    const ws = new WebSocket("ws://127.0.0.1:8000/ws/search");
+
+    ws.onopen = () => {
+      console.log("WS opened, sending query");
+      ws.send(JSON.stringify({ query: query }));
+    };
+
+    ws.onmessage = (event) => {
+      console.log("WS message received:", event.data);
+      const step = JSON.parse(event.data);
+      addStep(step);
+    };
+
+    ws.onclose = () => {
+      console.log("WS closed");
+      btn.disabled = false;
+      btn.textContent = "Search";
+    };
+
+    ws.onerror = (err) => {
+      console.log("WS error:", err);
+      const existing = document.getElementById("loading-indicator");
+      if (existing) existing.remove();
+      addStep({ type: "warning", content: "Connection error - is the server running?" });
+      btn.disabled = false;
+      btn.textContent = "Search";
+    };
+  });
+  </script>
+</body>
+</html>
